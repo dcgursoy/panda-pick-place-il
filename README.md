@@ -16,7 +16,7 @@ cross-check.
 
 ![A scripted pick-and-place in the environment: third-person view, front camera, wrist camera](docs/gifs/m1_env_demo.gif)
 
-> Status: **milestone 3 of 8 (expert, teleop, scripted dataset); waiting for human demonstrations.** [DESIGN.md](DESIGN.md) holds the
+> Status: **milestone 4 of 8 (splits, stats, LeRobot export and cross-check); waiting for human demonstrations.** [DESIGN.md](DESIGN.md) holds the
 > design decisions, the alternatives considered and the milestone plan;
 > [RESULTS.md](RESULTS.md) will hold the raw data behind every number reported
 > here, with the command that produced it; [docs/milestone-logs/](docs/milestone-logs/)

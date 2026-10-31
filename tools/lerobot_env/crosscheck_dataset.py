@@ -131,7 +131,7 @@ def main() -> int:
     )
 
     # LeRobot derives policy inputs from observation.* keys: the cube pose must not be among them
-    from lerobot.datasets.utils import dataset_to_policy_features
+    from lerobot.utils.feature_utils import dataset_to_policy_features
 
     policy_features = dataset_to_policy_features(lerobot_ds.features)
     inputs = sorted(k for k in policy_features if k != "action")

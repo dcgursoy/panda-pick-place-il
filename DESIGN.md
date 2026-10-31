@@ -300,3 +300,58 @@ benchmark needs and milestone 5 will reuse: the 1D conditional UNet
 and the ResNet18-GroupNorm + SpatialSoftmax image encoder (`policies/encoders.py`).
 
 Measurements and the self-check verdict: see `docs/milestone-logs/m0.md`.
+
+## 13. Splits, statistics, windows and the LeRobot export (milestone 4)
+
+**Splits** (`data/splits.py`). `splits.json` next to a dataset lists its
+training, validation and failed episode ids. Only successful episodes are
+used; the validation split is 20 episodes drawn once (seed 0) and never
+changes afterwards; failures are listed so their count stays visible. The
+demo-count subsets are `subset_ids(train_ids, n, seed)`: the first `n` ids of
+a shuffle seeded by `[seed, 7]`, so within a training seed the subsets are
+nested (the 25-demo run sees every episode the 10-demo run saw) and across
+seeds they differ, which makes the seed spread include "which demonstrations
+were drawn". The normaliser is fitted on the subset actually used
+(decision 9).
+
+**Statistics** (`data/stats.py`). Per-dimension min / max / mean / std of
+proprio, state and action over a split, action histograms and saturation
+fractions (|a| > 0.95), the gripper-closed fraction, episode-length summary
+and per-channel image means over a sample of episodes. The scripted table is
+in `docs/milestone-logs/m3.md`; the normaliser (decision 15) uses the min and
+max of the training subset, computed again at training time.
+
+**Windows** (`data/dataset.py`). `WindowDataset` holds every episode in RAM
+(the synced 20 Hz arrays plus the delivered camera frames) and indexes
+windows the way Diffusion Policy does: a window at step `i` carries the
+`obs_horizon` observations ending at `i` and the `pred_horizon` actions
+starting at `i`; out-of-range frames repeat the first or last one
+(`pad_before = To - 1`, `pad_after = Ta - 1`). Because the action chunk
+starts at the current observation, the executed slice at inference is its
+first `Ta` actions; these are the same actions Chi et al. execute as
+`[To-1 : To-1+Ta]` under their alignment, where the chunk starts `To - 1`
+steps earlier. Image policies read `proprio` (22-D), state policies `state`
+(29-D); the dataset never hands an image policy the cube pose.
+
+**LeRobot export** (`data/export_lerobot.py`, run in the LeRobot
+environment). LeRobot's own `LeRobotDataset.create` / `add_frame` /
+`save_episode` write the v3.0 format, so the result is whatever LeRobot
+0.6.1 considers valid, not an imitation of it. Two variants of the same
+dataset: `<name>_image` (observation.state = proprio, two 96 x 96 cameras,
+cube pose under `privileged.cube_pose`, a key LeRobot does not treat as an
+observation, so no LeRobot policy can condition on it) and `<name>_state`
+(observation.state = proprio, observation.environment_state = cube pose).
+Images go in as PNG inside the parquet files (`dtype "image"`) rather than
+AV1 video, so the codec is not a confound in the cross-check; only
+successful train and validation episodes are exported, and
+`export_map.json` maps LeRobot episode indices back to our ids.
+
+**Cross-check** (`tools/lerobot_env/crosscheck_dataset.py`). Loads the export
+with `LeRobotDataset`, compares 200 random frames against our Zarr (state,
+action, cube pose and decoded images must match exactly), builds a window
+with LeRobot's `delta_timestamps` for `To = 2`, `Tp = 16` and checks its
+shapes, and asks LeRobot's `dataset_to_policy_features` which keys a policy
+would be given: the image variant must list the two cameras and the 22-D
+state only. Result for `scripted_v1`: both variants exact, inputs as
+required (`docs/milestone-logs/m4.md`). What the cross-check does not cover
+is training; that is milestone 7's LeRobot Diffusion Policy run.
