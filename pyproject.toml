@@ -1,0 +1,104 @@
+[project]
+name = "panda-pick-place-il"
+version = "0.1.0"
+description = "Imitation learning study on a simulated Franka Panda: cube pick-and-place with behavior cloning, Diffusion Policy and a SAC baseline, with our own multi-rate dataset tooling"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = "MIT"
+authors = [{ name = "Deniz Gursoy" }]
+dependencies = [
+    "mujoco==3.17.0",
+    "mujoco-menagerie==2026.10.4",
+    "mink==1.3.0",
+    "gymnasium==1.4.0",
+    "stable-baselines3==2.9.2",
+    "zarr==3.4.2",
+    "numcodecs==0.17.1",
+    "numpy>=2.0,<3",
+    "imageio>=2.37",
+    "imageio-ffmpeg==0.7.0",
+    "pillow>=10",
+    "pygame-ce==2.5.8",
+    "pynput==1.8.2",
+    "tyro==1.0.16",
+    "tensorboard==2.21.0",
+    "matplotlib>=3.9",
+    "pandas>=2.2",
+    "pyarrow>=17",
+    "scipy>=1.14",
+    "pyyaml>=6",
+    "tqdm>=4.66",
+    # torch is deliberately loose here so the same package installs into the
+    # LeRobot environment (torch 2.11); the exact versions are chosen by the
+    # extras below and frozen in uv.lock.
+    "torch>=2.11,<2.16",
+    "torchvision>=0.26,<0.30",
+]
+
+[dependency-groups]
+# The torch backend is a dependency group rather than an extra so that a plain
+# `uv run` / `uv sync` keeps it: uv applies default-groups but never default extras.
+#   local (this laptop): uv sync                                   -> dev + xpu
+#   CI / CPU fallback:   uv sync --no-default-groups --group dev --group cpu
+# The XPU build needs Intel graphics driver >= 32.0.101.9033.
+xpu = ["torch==2.15.0", "torchvision==0.29.2", "triton-xpu==3.9.0"]
+cpu = ["torch==2.15.0", "torchvision==0.29.2"]
+dev = [
+    "pytest>=8.3",
+    "pytest-timeout>=2.3",
+    "ruff>=0.8",
+    # Only used by tests that compare our DDPM/DDIM schedulers against the reference implementation.
+    "diffusers>=0.42",
+]
+
+[tool.uv]
+default-groups = ["dev", "xpu"]
+conflicts = [[{ group = "xpu" }, { group = "cpu" }]]
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-xpu", group = "xpu" },
+    { index = "pytorch-cpu", group = "cpu" },
+]
+torchvision = [
+    { index = "pytorch-xpu", group = "xpu" },
+    { index = "pytorch-cpu", group = "cpu" },
+]
+triton-xpu = { index = "pytorch-xpu", group = "xpu" }
+
+[[tool.uv.index]]
+name = "pytorch-xpu"
+url = "https://download.pytorch.org/whl/xpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["panda_il"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+timeout = 600
+markers = [
+    "render: needs an OpenGL context (MuJoCo offscreen rendering); skipped in CI",
+    "viewer: opens the interactive MuJoCo viewer; never run in CI",
+    "xpu: needs a working Intel XPU device; skipped when unavailable",
+    "slow: takes more than a minute",
+]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = [".", "tools/lerobot_env"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "NPY"]
+ignore = ["E501"]

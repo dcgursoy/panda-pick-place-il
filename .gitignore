@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+tools/lerobot_env/.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Heavy artifacts never belong in git (they live under DATA_ROOT, default C:\robodata\panda-pick-place-il)
+data/
+datasets/
+runs/
+videos/
+outputs/
+logs/
+lerobot/
+*.zarr/
+*.zarr
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.mp4
+*.npz
+*.parquet
+*.log
+*.tfevents.*
+
+# The only media that is committed is what the README shows
+!docs/figures/**
+!docs/gifs/**
+
+# Editors and OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

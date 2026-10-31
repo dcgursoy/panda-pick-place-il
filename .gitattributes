@@ -1,0 +1,7 @@
+# Developed on Windows, run in CI on Linux: keep every text file LF in the working copy too.
+* text=auto eol=lf
+*.stl binary
+*.png binary
+*.gif binary
+*.mp4 binary
+*.npz binary

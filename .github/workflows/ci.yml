@@ -1,0 +1,43 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Lint and CPU tests (Linux)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install Python 3.12 and the CPU environment
+        run: |
+          uv python install 3.12
+          uv sync --no-default-groups --group dev --group cpu
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Format check
+        run: uv run ruff format --check .
+
+      # Rendering, viewer and XPU tests need this laptop's GPU; they run locally
+      # and their output is recorded in docs/milestone-logs/.
+      - name: Tests
+        run: uv run pytest -m "not render and not viewer and not xpu" -q
