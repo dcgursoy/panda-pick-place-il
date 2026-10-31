@@ -112,8 +112,9 @@ class CameraSet:
             self.model, data
         )  # idempotent since MuJoCo 3.3.6: positions for rendering, state untouched
         arrival = self.clock.arrival_substep(self.next_tick)
-        for name in self.names:
-            frame = Frame(self._render(data, name), substep, arrival)
+        frames = {name: self._render(data, name) for name in self.names}
+        for name, image in frames.items():
+            frame = Frame(image, substep, arrival)
             self.pending.append((name, frame))
             for listener in self.capture_listeners:
                 listener(name, frame)

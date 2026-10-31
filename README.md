@@ -16,7 +16,7 @@ cross-check.
 
 ![A scripted pick-and-place in the environment: third-person view, front camera, wrist camera](docs/gifs/m1_env_demo.gif)
 
-> Status: **milestone 2 of 8 (dataset tooling).** [DESIGN.md](DESIGN.md) holds the
+> Status: **milestone 3 of 8 (expert, teleop, scripted dataset); waiting for human demonstrations.** [DESIGN.md](DESIGN.md) holds the
 > design decisions, the alternatives considered and the milestone plan;
 > [RESULTS.md](RESULTS.md) will hold the raw data behind every number reported
 > here, with the command that produced it; [docs/milestone-logs/](docs/milestone-logs/)
@@ -57,6 +57,45 @@ The LeRobot cross-check uses a second, isolated environment because LeRobot
 ```bash
 cd tools/lerobot_env && uv sync
 ```
+
+## Recording demonstrations
+
+```bash
+uv run python -m panda_il.teleop.teleop --dataset human_v1 --operator "<your name>"
+```
+
+A MuJoCo window opens with the arm at its home pose. Keep that window in the
+foreground; keys are read globally but ignored while another window is active.
+The gamepad is used automatically when one is connected (check its mapping once
+with `--calibrate`; the mapping lives in `configs/gamepad.yaml`).
+
+| Key | Gamepad (PlayStation) | Action |
+|---|---|---|
+| N | circle | start a new episode: fresh random cube pose, recording begins |
+| K | triangle | keep the episode (saved; the running count is printed) |
+| X | square | discard the episode |
+| G | cross | toggle the gripper |
+| R | options | reset the scene without recording |
+| Esc | share | quit |
+| W / S, A / D, Q / E | left stick, triggers | move the gripper along x, y, z (hold) |
+| arrows, [ ] | right stick | tilt and rotate the gripper (hold) |
+
+An episode ends by itself once the cube rests in the bin (the window prints
+"episode complete"); press K to keep it. Failed attempts can be kept too (they
+are stored with `success=false` and excluded from training) or discarded.
+Each episode is validated and replayable:
+
+```bash
+uv run python -m panda_il.data.validate --dataset human_v1
+uv run python -m panda_il.data.replay --dataset human_v1 --episodes 0 1 2
+uv run python -m panda_il.data.render --dataset human_v1 --episode 0 --gif
+```
+
+With the viewer window at its default size the loop runs at about 16 Hz
+wall-clock on this laptop (the viewer's own drawing competes with the
+observation cameras for the iGPU); the recorded timestamps are simulation
+time, so the data is unaffected, the motion just looks a little slow. A
+smaller viewer window helps.
 
 ## Layout
 

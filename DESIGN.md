@@ -253,7 +253,42 @@ third-person view re-rendered from the logged state.
 
 Measurements and the synthetic test cases: `docs/milestone-logs/m2.md`.
 
-## 11. Milestone 0: bootstrap
+## 11. The scripted expert and the teleop tool (milestone 3)
+
+**Expert.** A privileged state machine (align above the cube with the finger
+axis matched to the cube's yaw modulo 90 degrees, descend, close for 12
+steps, lift, carry over the bin, lower, open, retreat) that moves the
+commanded TCP proportionally toward each phase target through the same 7-D
+action interface a human uses. It exists to test the pipeline and for the
+human-versus-scripted ablation; it can quantise its actions to the keyboard's
+{-1, 0, +1} levels so that ablation can be run with matched action
+distributions, and everything it records is tagged `source="scripted"`.
+Measured: 100 % success on 50 random poses and on every committed held-out
+set, 120-153 steps per episode.
+
+**Teleop.** The 20 Hz loop is paced by the wall clock and polls the input at
+50 Hz; every polled command is logged at its own time and the command in force
+at a tick is what the environment executes. Keys are read with a global
+`pynput` listener (press and release), gated on the MuJoCo window being in
+the foreground, because the passive viewer only reports key presses and
+consumes Space, Backspace, Tab and the F-keys itself; the single-key commands
+(N start, K keep, X discard, G gripper, R reset) are letters the viewer does
+not use. Gamepads are read through pygame-ce (SDL2) with a mapping file and a
+`--calibrate` mode. An `--autopilot` mode drives the same session with the
+expert so the whole recording path can be tested without a human.
+
+**Viewer contention.** With the passive viewer open, the two 96 x 96 offscreen
+renders per step take ~110 ms instead of ~22 ms: the viewer's render thread
+competes for the iGPU. Holding the viewer's lock during the step confines its
+drawing to the idle gap and brings the step to ~60 ms, i.e. about 16 Hz
+wall-clock at the default window size. The recorded data is simulation-timed
+and unaffected; a smaller viewer window helps, and rendering both cameras in
+one offscreen pass (one readback) is the remaining optimisation if the feel
+matters.
+
+Measurements: `docs/milestone-logs/m3.md`.
+
+## 12. Milestone 0: bootstrap
 
 What was built: the repository and package skeleton, the two uv environments
 and their lock files, DATA_ROOT resolution (`paths.py`), the XPU trust logic
