@@ -22,9 +22,7 @@ def test_keyboard_jog_and_commands_without_a_listener():
     assert keys.gripper_closed and action[6] == 1.0 and commands == ["start"]
     action, commands = keys.poll()  # still held: no repeat of single-key commands
     assert commands == []
-    from pynput.keyboard import KeyCode
-
-    keys._on_release(KeyCode.from_char("n"))  # released -> can fire again
+    keys.release("n")  # released -> can fire again
     keys._pressed = {"n", "k", "x"}
     _, commands = keys.poll()
     assert set(commands) == {"start", "keep", "discard"}

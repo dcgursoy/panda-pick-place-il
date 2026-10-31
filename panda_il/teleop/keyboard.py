@@ -88,9 +88,13 @@ class KeyboardInput:
     def _on_release(self, key) -> None:
         name = self._key_name(key)
         if name is not None:
-            with self._lock:
-                self._pressed.discard(name)
-                self._seen_commands.discard(name)
+            self.release(name)
+
+    def release(self, name: str) -> None:
+        """Forget a key by name (what the listener does on key release)."""
+        with self._lock:
+            self._pressed.discard(name)
+            self._seen_commands.discard(name)
 
     def start(self) -> None:
         from pynput import keyboard
