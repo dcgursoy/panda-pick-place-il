@@ -78,6 +78,7 @@ class PandaPickPlaceEnv(gym.Env):
         self.gripper_closed = False
         self.target_pose = None
         self.tracking_lag = (0.0, 0.0)
+        self.last_action = np.zeros(ACTION_DIM)
         self.q_target = np.zeros(7)
         self.ic: InitialCondition | None = None
         self.substep_listeners: list = []  # called as f(substep) after every physics substep (the logger)
@@ -170,6 +171,9 @@ class PandaPickPlaceEnv(gym.Env):
             self.cameras.next_tick = self.substep // self.cfg.substeps + 1
 
     def _observation(self) -> dict[str, np.ndarray]:
+        # Site poses in mjData lag one substep behind qpos after mj_step; refresh them so the
+        # observation is exactly the state at this tick (mj_kinematics changes no state).
+        mujoco.mj_kinematics(self.model, self.data)
         obs: dict[str, np.ndarray] = {}
         if self.cfg.obs_mode in ("state", "both"):
             obs["state"] = self.state()
@@ -182,7 +186,11 @@ class PandaPickPlaceEnv(gym.Env):
 
     def _info(self, success_now: bool, detail: dict, terms: dict[str, float]) -> dict[str, Any]:
         tcp_pos, tcp_quat = self.tcp_pose_measured()
+        cube_pos, cube_quat, cube_linvel = task.cube_state(self.data, self.ids)
         info: dict[str, Any] = {
+            "cube_pos": cube_pos,
+            "cube_quat": cube_quat,
+            "cube_linvel": cube_linvel,
             "success": bool(self.success_streak >= self.cfg.success_steps),
             "cube_in_bin_now": success_now,
             "success_detail": detail,
@@ -200,6 +208,7 @@ class PandaPickPlaceEnv(gym.Env):
             "q_target": self.q_target.copy(),
             "ctrl": self.data.ctrl.copy(),
             "gripper_closed": self.gripper_closed,
+            "action_executed": self.last_action.copy(),
             "resync_count": self.resync_count,
             "ik_iterations": getattr(self.ik, "iterations_last_solve", 0),
             "ic": self.ic.to_dict() if self.ic is not None else None,
@@ -236,6 +245,7 @@ class PandaPickPlaceEnv(gym.Env):
         self.success_streak = 0
         self.resync_count = 0
         self.tracking_lag = (0.0, 0.0)
+        self.last_action = np.zeros(ACTION_DIM)
         self.gripper_closed = False
         if self.cameras is not None:
             self.cameras.reset(self.data)
@@ -267,6 +277,7 @@ class PandaPickPlaceEnv(gym.Env):
             cfg.workspace_max,
         )
         self.q_target = self.ik.solve(self.target_pose, cfg.control_dt)
+        self.last_action = action.copy()
         self.gripper_closed = bool(action[6] > 0.0)
         self.data.ctrl[self.ids.arm_actuators] = self.q_target
         self.data.ctrl[self.ids.gripper_actuator] = (

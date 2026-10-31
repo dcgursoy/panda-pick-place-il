@@ -210,7 +210,50 @@ an episode can be continued bit-for-bit (replay in milestone 2 builds on this).
 
 Measurements: `docs/milestone-logs/m1.md`.
 
-## 10. Milestone 0: bootstrap
+## 10. The dataset tooling (milestone 2)
+
+**Why our own format.** The brief asks for the logging and the format to be
+written here rather than taken from LeRobot, so that every timing decision is
+explicit: each stream keeps its own clock, and the alignment onto the control
+timeline is a separate, tested step whose errors are measured and stored.
+
+**Streams.** `proprio` at 100 Hz (every fifth physics substep, from a
+kinematics pass so the TCP pose is exact), `cam_<name>` on each camera's own
+clock with capture and arrival substeps, `action` at the input rate (every
+command the teleop or the expert issued), `obs` and `priv` at every control
+tick (what the policy saw, and the privileged simulator state, contacts,
+reward terms and the executed action), `init` at reset. Every sample carries
+simulation time, wall time and the physics substep; the substep is the clock
+the sync works in, because it is an integer.
+
+**Sync.** Onto ticks 0, 25, 50, ...: proprio by linear interpolation
+(quaternions by normalised lerp), the cube pose from the privileged stream,
+cameras by the most recent frame that had *arrived* by the tick (as an index
+into the raw frames), actions zero-order held. The maximum alignment error
+per stream is stored in the episode attributes; with the default camera
+timing it is 20 ms for the cameras and 0 for everything else.
+
+**Store.** One Zarr v3 group per episode under `episodes.zarr/` with `raw/`,
+`init/`, `synced/` and the episode attributes; images chunked 32 frames at a
+time with Blosc/zstd; a `metadata.json` per dataset with the environment
+version and config, rates, camera intrinsics and clock settings, action and
+observation specs, library versions, git commit, source, operator, input
+device and counts. The source (`human` or `scripted`) is in both the dataset
+metadata and every episode, and the validator refuses a mismatch.
+
+**Validator, replay, render.** The validator checks structure, timing, values
+and, above all, consistency: a fresh sync must reproduce the stored arrays,
+the synced observations must equal the logged ones, and the zero-order-held
+commands must equal what the environment executed. Replay re-runs the synced
+actions from the logged seed and initial condition and compares the simulator
+state at every tick bit for bit; because MuJoCo and the controller are
+deterministic, anything but exact equality means the recording or the
+environment changed. Render writes the frames the policy saw next to a
+third-person view re-rendered from the logged state.
+
+Measurements and the synthetic test cases: `docs/milestone-logs/m2.md`.
+
+## 11. Milestone 0: bootstrap
 
 What was built: the repository and package skeleton, the two uv environments
 and their lock files, DATA_ROOT resolution (`paths.py`), the XPU trust logic

@@ -88,6 +88,7 @@ class CameraSet:
         self.latest: dict[str, Frame] = {}
         self.pending: list[tuple[str, Frame]] = []
         self.next_tick = 1
+        self.capture_listeners: list = []  # called as f(name, frame) whenever a camera captures
 
     def _render(self, data: mujoco.MjData, name: str) -> np.ndarray:
         self.renderer.update_scene(data, camera=name)
@@ -99,6 +100,9 @@ class CameraSet:
         self.pending = []
         self.latest = {name: Frame(self._render(data, name), 0, 0) for name in self.names}
         self.next_tick = 1
+        for name, frame in self.latest.items():
+            for listener in self.capture_listeners:
+                listener(name, frame)
 
     def maybe_capture(self, data: mujoco.MjData, substep: int) -> bool:
         """Call after every physics substep; renders when a capture is due. Returns True if it rendered."""
@@ -109,7 +113,10 @@ class CameraSet:
         )  # idempotent since MuJoCo 3.3.6: positions for rendering, state untouched
         arrival = self.clock.arrival_substep(self.next_tick)
         for name in self.names:
-            self.pending.append((name, Frame(self._render(data, name), substep, arrival)))
+            frame = Frame(self._render(data, name), substep, arrival)
+            self.pending.append((name, frame))
+            for listener in self.capture_listeners:
+                listener(name, frame)
         self.next_tick += 1
         return True
 
