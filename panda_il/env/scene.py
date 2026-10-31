@@ -122,9 +122,8 @@ def build_scene_spec() -> mujoco.MjSpec:
     frame.attach_body(panda.body("link0"), PREFIX, "")
 
     hand = spec.body(HAND_BODY)
-    hand.add_site(
-        name=TCP_SITE, pos=list(TCP_OFFSET_IN_HAND), size=[0.004, 0.004, 0.004], rgba=[0, 1, 0, 0.5]
-    )
+    # group 3 keeps the site out of rendered images (the renderer draws site groups 0-2)
+    hand.add_site(name=TCP_SITE, pos=list(TCP_OFFSET_IN_HAND), size=[0.004, 0.004, 0.004], group=3)
     hand.add_camera(
         name=WRIST_CAMERA,
         pos=list(WRIST_CAMERA_POS_IN_HAND),
