@@ -61,7 +61,7 @@ cd tools/lerobot_env && uv sync
 ## Recording demonstrations
 
 ```bash
-uv run python -m panda_il.teleop.teleop --dataset human_v1 --operator "<your name>"
+uv run python -m panda_il.teleop.teleop --dataset human_v1 --operator "<your name>" --max-steps 1200
 ```
 
 A MuJoCo window opens with the arm at its home pose. Keep that window in the
@@ -81,7 +81,10 @@ with `--calibrate`; the mapping lives in `configs/gamepad.yaml`).
 | arrows, [ ] | right stick | tilt and rotate the gripper (hold) |
 
 An episode ends by itself once the cube rests in the bin (the window prints
-"episode complete"); press K to keep it. Failed attempts can be kept too (they
+"episode complete"); press K to keep it. `--max-steps 1200` caps a recording
+at 60 s of simulation time (the default 300 is the scripted expert's limit);
+the time limit used for training and evaluation is fixed afterwards from the
+recorded demo lengths. Failed attempts can be kept too (they
 are stored with `success=false` and excluded from training) or discarded.
 Each episode is validated and replayable:
 

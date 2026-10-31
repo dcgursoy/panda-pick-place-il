@@ -1,6 +1,6 @@
 """Teleoperation with the live MuJoCo viewer, recording demonstrations into a dataset.
 
-    uv run python -m panda_il.teleop.teleop --dataset human_v1 --operator "Deniz"
+    uv run python -m panda_il.teleop.teleop --dataset human_v1 --operator "Deniz" --max-steps 1200
     uv run python -m panda_il.teleop.teleop --calibrate            # print gamepad axes and buttons live
     uv run python -m panda_il.teleop.teleop --dataset test --autopilot --no-viewer --episodes 3   # pipeline test
 
@@ -87,6 +87,9 @@ class TeleopSession:
         )
         self.obs = None
         self.info = None
+        self.episode_over = (
+            False  # a recorded episode ended (success or time limit): frozen until K / X
+        )
         self.profile: dict[str, list[float]] = {"step": [], "sync": [], "tick": []}
 
     def _print(self, message: str) -> None:
@@ -109,6 +112,7 @@ class TeleopSession:
     def _reset(self, record: bool) -> None:
         seed = self.next_seed
         self.next_seed += 1
+        self.episode_over = False
         if record and self.recorder is not None:
             self.obs, self.info = self.recorder.start(seed=seed)
             self._print(f"episode started (seed {seed}); K keeps, X discards")
@@ -173,7 +177,11 @@ class TeleopSession:
                         elif command == "quit":
                             self._finish(keep=False)
                             return 0
-                    if self.recorder is not None and self.recorder.recording:
+                    if (
+                        self.recorder is not None
+                        and self.recorder.recording
+                        and not self.episode_over
+                    ):
                         self.recorder.log_command(latest)
                     now = time.perf_counter()
                     if now >= next_tick:
@@ -184,17 +192,27 @@ class TeleopSession:
                 # The passive viewer's render thread competes with the offscreen camera renders
                 # for the iGPU (two 96x96 renders take ~110 ms instead of ~22 ms while it draws);
                 # holding its lock for the step confines the viewer's drawing to the idle gap.
+                recording = self.recorder is not None and self.recorder.recording
+                terminated = truncated = False
                 with viewer.lock() if viewer is not None else nullcontext():
-                    if self.recorder is not None and self.recorder.recording:
+                    if recording and not self.episode_over:
                         self.obs, _, terminated, truncated, self.info = self.recorder.step(
                             latest, log_command=False
                         )
-                    else:
+                    elif not recording:
                         self.obs, _, terminated, truncated, self.info = env.step(latest)
-                if self.recorder is not None and self.recorder.recording:
+                    # a finished recording is frozen (nothing stepped) until K or X
+                if recording:
                     if terminated:
+                        self.episode_over = True
                         self._print(
                             "the cube rests in the bin: episode complete, press K to keep it"
+                        )
+                    elif truncated:
+                        self.episode_over = True
+                        self._print(
+                            f"time limit reached ({env.cfg.max_steps} steps): the episode counts "
+                            "as failed; K keeps it as a failed demo, X discards it"
                         )
                 elif terminated or truncated:
                     self._reset(record=False)
@@ -253,6 +271,13 @@ def main() -> int:
     )
     parser.add_argument("--no-viewer", action="store_true")
     parser.add_argument(
+        "--max-steps",
+        type=int,
+        default=300,
+        help="episode cap in control steps (20 per second); use ~1200 for human recording, "
+        "the evaluation limit is fixed afterwards from the demo lengths",
+    )
+    parser.add_argument(
         "--autopilot",
         action="store_true",
         help="drive with the scripted expert instead of a human (pipeline test)",
@@ -272,7 +297,7 @@ def main() -> int:
 
     paths = Paths.resolve(args.data_root)
     paths.make_dirs()
-    env = make_env(EnvConfig(obs_mode="both"))
+    env = make_env(EnvConfig(obs_mode="both", max_steps=args.max_steps))
 
     if args.autopilot:
         inputs = AutopilotInput(env, args.episodes)

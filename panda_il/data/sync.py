@@ -46,14 +46,26 @@ def interpolate_linear(
 def interpolate_quaternion(
     sample_substeps: np.ndarray, quats: np.ndarray, tick_substeps: np.ndarray
 ) -> np.ndarray:
-    """Normalised lerp between neighbouring samples, after making consecutive signs agree."""
-    quats = np.asarray(quats, dtype=np.float64).copy()
+    """Normalised lerp between neighbouring samples.
+
+    Consecutive samples are made to agree in sign before interpolating (q and
+    -q are the same rotation), then each result takes the sign of the raw
+    sample at or before its tick: MuJoCo's quaternion is not sign-continuous,
+    and the policy sees the raw sign at evaluation time, so the synced value
+    at a tick must equal the logged observation exactly (the validator checks
+    this)."""
+    raw = np.asarray(quats, dtype=np.float64)
+    quats = raw.copy()
     for i in range(1, len(quats)):
         if np.dot(quats[i], quats[i - 1]) < 0:
             quats[i] *= -1
     out = interpolate_linear(sample_substeps, quats, tick_substeps)
     norms = np.linalg.norm(out, axis=1, keepdims=True)
-    return out / np.where(norms > 0, norms, 1.0)
+    out = out / np.where(norms > 0, norms, 1.0)
+    ref = raw[np.clip(latest_index_at_or_before(sample_substeps, tick_substeps), 0, len(raw) - 1)]
+    flip = np.einsum("ij,ij->i", out, ref) < 0
+    out[flip] *= -1
+    return out
 
 
 def nearest_sample_distance(sample_substeps: np.ndarray, tick_substeps: np.ndarray) -> np.ndarray:
