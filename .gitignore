@@ -8,14 +8,15 @@ tools/lerobot_env/.venv/
 .ruff_cache/
 .mypy_cache/
 
-# Heavy artifacts never belong in git (they live under DATA_ROOT, default C:\robodata\panda-pick-place-il)
-data/
-datasets/
-runs/
-videos/
-outputs/
-logs/
-lerobot/
+# Heavy artifacts never belong in git (they live under DATA_ROOT, default C:\robodata\panda-pick-place-il).
+# Anchored to the repository root: a bare `data/` would also hide the package panda_il/data/.
+/data/
+/datasets/
+/runs/
+/videos/
+/outputs/
+/logs/
+/lerobot/
 *.zarr/
 *.zarr
 *.pt
