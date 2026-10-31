@@ -16,7 +16,7 @@ cross-check.
 
 ![A scripted pick-and-place in the environment: third-person view, front camera, wrist camera](docs/gifs/m1_env_demo.gif)
 
-> Status: **milestone 4 of 8 (splits, stats, LeRobot export and cross-check); waiting for human demonstrations.** [DESIGN.md](DESIGN.md) holds the
+> Status: **milestone 5 of 8 (policies, training and evaluation, verified on scripted data); waiting for human demonstrations.** [DESIGN.md](DESIGN.md) holds the
 > design decisions, the alternatives considered and the milestone plan;
 > [RESULTS.md](RESULTS.md) will hold the raw data behind every number reported
 > here, with the command that produced it; [docs/milestone-logs/](docs/milestone-logs/)
@@ -96,6 +96,33 @@ wall-clock on this laptop (the viewer's own drawing competes with the
 observation cameras for the iGPU); the recorded timestamps are simulation
 time, so the data is unaffected, the motion just looks a little slow. A
 smaller viewer window helps.
+
+## Training and evaluation
+
+Every stage is one command; `--help` lists every option (dataclass configs
+through [tyro](https://github.com/brentyi/tyro)). Runs go to
+`DATA_ROOT/runs/<method>/<dataset>_<obs>_<subset>/seed<k>` with their resolved
+config, TensorBoard events, checkpoints and a `summary.json`.
+
+```bash
+uv run python -m panda_il.data.splits --dataset human_v1 --val 20                       # fixed validation split (once per dataset)
+uv run python -m panda_il.train.train_bc --train.dataset human_v1 --train.obs-mode state  # BC-MLP, action chunks
+uv run python -m panda_il.train.train_bc --train.dataset human_v1 --train.obs-mode state --policy.pred-horizon 1 --policy.action-horizon 1 --train.run-name bc_single/human_v1_state_all/seed0
+uv run python -m panda_il.train.train_diffusion --train.dataset human_v1 --train.obs-mode state                                # Diffusion Policy, state
+uv run python -m panda_il.train.train_bc --train.dataset human_v1 --train.obs-mode image --train.batch-size 64               # BC-ResNet
+uv run python -m panda_il.train.train_diffusion --train.dataset human_v1 --train.obs-mode image --train.batch-size 64        # Diffusion Policy, images
+uv run python -m panda_il.train.train_diffusion --train.dataset human_v1 --train.obs-mode state --train.subset 50 --train.seed 1  # demo-count curve point
+uv run tensorboard --logdir "C:/robodata/panda-pick-place-il/runs"
+uv run python -m panda_il.eval.evaluate --checkpoint "<run dir>/last.pt" --ic-set dev_set_v1 --gifs 2    # 20 dev episodes, 2 GIFs
+uv run python -m panda_il.eval.evaluate --checkpoint "<run dir>/last.pt" --ic-set eval_set_v1           # 100 held-out episodes, logged in docs/eval_ledger.jsonl
+```
+
+Ten environments run in lockstep during evaluation so that one batched
+network call serves all of them; each episode is seeded from its initial
+condition index, so a report is reproducible and independent of the batch
+size. The milestone 5 log has the measured training speed and dev-set
+success of every method on the scripted data
+([docs/milestone-logs/m5.md](docs/milestone-logs/m5.md)).
 
 ## Layout
 

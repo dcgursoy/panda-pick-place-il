@@ -56,7 +56,7 @@ panda_il/
   teleop/   teleop.py, keyboard.py, gamepad.py, expert.py                                 (M3)
   data/     logger.py, schema.py, sync.py, validate.py, stats.py, replay.py, render.py,
             splits.py, export_lerobot.py, dataset.py                                      (M2, M4)
-  policies/ encoders.py, normalize.py, bc_mlp.py, bc_resnet.py, diffusion/{unet1d,schedulers,ema,policy}.py (M0, M5)
+  policies/ encoders.py, normalize.py, obs_encoder.py, bc.py, checkpoint.py, diffusion/{unet1d,schedulers,ema,policy}.py (M0, M5)
   train/    loop.py, train_bc.py, train_diffusion.py, train_sac.py                        (M5, M6)
   eval/     evaluate.py, aggregate.py, plots.py, gifs.py, failures.py                     (M5, M7)
 scripts/    fetch_assets.py, check_xpu.py, bench_device.py, make_eval_sets.py, collect_expert.py, run_matrix.py
@@ -150,6 +150,31 @@ DP-image at all demos x 5 seeds and at 50/100 demos x 3 seeds; BC-ResNet
 single-step x 3 seeds; human versus scripted at 100 demos for all methods;
 SAC x 3 seeds; LeRobot DP (state and image) x 1. CPU-only training of the
 image policies would take 22 h per run and is not an option.
+
+Re-fit after milestone 5 (measured on the scripted runs, 20k steps each
+with four 20-episode dev evaluations included, `docs/milestone-logs/m5.md`):
+
+| Run type | Measured per run | Runs | Total |
+|---|---|---|---|
+| BC-MLP chunk, single-step, no-EMA (state), 7 ms/step | 2.5 min | 55 | ~2.5 h |
+| DP-state, small UNet, 90 ms/step | 32 min | 25 | ~13.5 h |
+| DP-state, paper UNet (not measured; benchmark 488 ms) | ~2.7 h | 1 | ~3 h |
+| BC-ResNet chunk, 298 ms/step | 106 min | 11 | ~19.5 h |
+| BC-ResNet single-step | ~106 min | 3 | ~5.5 h |
+| DP-image, 330 ms/step | 119 min | 11 | ~22 h |
+| Human vs scripted at 100 demos (5 methods) | as above | 15 state + 6 image | ~14 h |
+| SAC, 1-2 M env steps (CPU; confirmed in M6) | 2-4 h | 3 + smoke | ~10 h |
+| LeRobot DP state + image | ~0.5 h + ~2 h | 2 | ~3 h |
+| Held-out evaluations (100 episodes: state ~1.5 min, image ~6.5 min with ten lockstep envs) | | ~180 | ~10 h |
+
+About 100 laptop-hours. The image runs are 1.5 to 1.7 times slower than the
+milestone 0 benchmark predicted (the benchmark timed the networks alone; a
+training step also crops, normalises and moves 256 images, updates the EMA
+and runs the optimiser), the state runs match it. One caveat for the matrix:
+DP-image was still improving at 20k steps on scripted data (dev success
+0 / 35 / 80 / 90 % at 5k / 10k / 15k / 20k, validation loss still falling),
+so the image budget is a decision to revisit with the human data before
+milestone 7 (section 14, `m5.md`).
 
 ## 8. Risks and fallbacks
 
@@ -355,3 +380,76 @@ would be given: the image variant must list the two cameras and the 22-D
 state only. Result for `scripted_v1`: both variants exact, inputs as
 required (`docs/milestone-logs/m4.md`). What the cross-check does not cover
 is training; that is milestone 7's LeRobot Diffusion Policy run.
+
+## 14. Policies, training and evaluation (milestone 5)
+
+**Normalisation** (`policies/normalize.py`). Min-max per dimension to
+[-1, 1] from the training subset; a dimension whose range is below 1e-4 maps
+to 0 (the expert never rolls or pitches, so those two action dimensions are
+constant in scripted data). Images map to [-1, 1]. The normalisers are
+`nn.Module` buffers, so they travel inside the checkpoint.
+
+**Observation encoder** (`policies/obs_encoder.py`), shared by behaviour
+cloning and Diffusion Policy so the two differ only in head and loss
+(decision 11). State mode: the normalised 29-D state of the last `To = 2`
+steps, concatenated (58-D). Image mode: the normalised 22-D proprio plus, per
+camera and per step, the ResNet18-GroupNorm + SpatialSoftmax(32) + Linear(64)
+encoder from milestone 0 (`policies/encoders.py`, no pretrained weights),
+concatenated to 2 x (22 + 2 x 64) = 300-D. Random 84 x 84 crops of the
+96 x 96 frames in training, the centre crop at evaluation. An image policy
+never sees the cube pose: its lowdim input is `proprio` by construction.
+
+**Behaviour cloning** (`policies/bc.py`). Encoder, then a 3 x 512 MLP that
+regresses the normalised action chunk (`Tp = 16` steps x 7); MSE loss. The
+single-step ablation is the same model with `pred_horizon = action_horizon = 1`.
+With the image encoder this is "BC-ResNet", with the state input "BC-MLP".
+
+**Diffusion Policy** (`policies/diffusion/`). The ConditionalUnet1D of Chi
+et al. (2023) from milestone 0 with FiLM conditioning on the encoder output
+and the sinusoidal step embedding; `down_dims = (128, 256, 512)` for the
+matrix (40.9 M parameters with the image encoders, 9 M for state),
+`(256, 512, 1024)` as the paper-size option. Training: DDPM with 100
+squared-cosine steps, epsilon prediction, MSE. Inference: DDIM with 10 steps
+and eta = 0 by default, DDPM-100 as an option. Both schedulers are written
+here (`schedulers.py`) and unit-tested against `diffusers` to 1e-5 on
+`add_noise`, every DDPM step and whole 10 / 16-step DDIM trajectories
+(`tests/test_policies.py`). Noise is drawn on the CPU from one generator per
+batch element, so a sample depends on its own seed only, never on what else
+is in the batch. EMA weights (`ema.py`: power 0.75, max decay 0.9999, the
+schedule of the reference implementation) are what gets evaluated.
+
+**Training loop** (`train/loop.py`, CLIs `train/train_bc.py` and
+`train/train_diffusion.py`). One protocol per modality (decision 11): AdamW
+(lr 1e-4, weight decay 1e-6, betas 0.95 / 0.999, fused kernel on the XPU),
+cosine schedule with 500 warm-up steps, 20k gradient steps, batch 256 for
+state and 64 for images, bf16 autocast on the XPU with fp32 optimiser and
+EMA maths, EMA for both methods. The dataset is held in RAM and batched in
+the main process (decision 14). A run directory under
+`DATA_ROOT/runs/<method>/<dataset>_<obs>_<subset>/seed<k>` holds
+`config.json` (resolved configs, episode ids, device, git commit),
+TensorBoard events (train and validation loss, learning rate, ms per step,
+dev-set success), checkpoints every 5k steps plus `last.pt`, and
+`summary.json` with the timings. Checkpoints hold raw and EMA weights, the
+normalisers, both configs and the provenance; `policies/checkpoint.py`
+rebuilds a policy from one. Seeding covers Python, NumPy, torch and the XPU;
+the DataLoader has its own seeded generator and `subset_ids` makes the
+demonstration subset a function of the seed.
+
+**Evaluation** (`eval/evaluate.py`). `n_envs` environments run in lockstep
+so one batched network call serves all of them, which matters on this iGPU
+where a single-sample 10-step denoise is launch-bound (~180 ms) and a batch of
+ten costs about the same. Every episode is seeded from (evaluation seed, IC
+index) with `SeedSequence`, including its diffusion noise, so results are
+reproducible and independent of batch composition. The policy sees the last
+`To` observations (edge padded after reset, as training windows are), predicts
+a chunk and executes its first `Ta = 8` actions (section 13), clipped to
+[-1, 1]. Each episode gets a failure label from the privileged log
+(`eval/failures.py`, section 7.6's decision tree: grasp event, release event,
+where the cube ended) and the report records per-episode outcomes, label
+counts, inference ms per call, env ms per step, device and git state. GIFs
+show the third-person view next to what the policy saw. Evaluating on a
+held-out set appends to `docs/eval_ledger.jsonl` (decision 9); the dev set is
+used for curves during training (`--train.dev-eval-every`) and for this
+milestone's smoke numbers.
+
+Measurements: `docs/milestone-logs/m5.md`.
