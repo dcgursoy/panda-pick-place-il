@@ -102,3 +102,7 @@ src = [".", "tools/lerobot_env"]
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "NPY"]
 ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+# Explicit so that Windows (dev) and Linux (CI) sort imports identically.
+known-first-party = ["panda_il", "tests"]
