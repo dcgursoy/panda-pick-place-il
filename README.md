@@ -1,5 +1,7 @@
 # panda-pick-place-il
 
+[![ci](https://github.com/dcgursoy/panda-pick-place-il/actions/workflows/ci.yml/badge.svg)](https://github.com/dcgursoy/panda-pick-place-il/actions/workflows/ci.yml)
+
 An imitation learning study on a simulated Franka Panda: a cube is picked up and
 placed in a bin, demonstrated by a human through keyboard or gamepad teleop in
 MuJoCo, and learned by behavior cloning (MLP and ResNet18) and by Diffusion
