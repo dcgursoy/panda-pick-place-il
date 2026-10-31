@@ -74,7 +74,9 @@ class DatasetMetadata:
     git_dirty: bool
     created_at: str
     schema_version: int = SCHEMA_VERSION
-    counts: dict[str, int] = field(default_factory=lambda: {"episodes": 0, "successes": 0, "discarded": 0})
+    counts: dict[str, int] = field(
+        default_factory=lambda: {"episodes": 0, "successes": 0, "discarded": 0}
+    )
     notes: str = ""
 
     def to_json(self) -> str:
@@ -99,10 +101,20 @@ def git_state(repo: Path = REPO_ROOT) -> tuple[str, bool]:
     """Current commit hash and whether the working tree has uncommitted changes."""
     try:
         commit = subprocess.run(
-            ["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True, check=True, timeout=20
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=20,
         ).stdout.strip()
         status = subprocess.run(
-            ["git", "status", "--porcelain"], cwd=repo, capture_output=True, text=True, check=True, timeout=20
+            ["git", "status", "--porcelain"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=20,
         ).stdout.strip()
         return commit, bool(status)
     except (OSError, subprocess.SubprocessError):
@@ -113,7 +125,16 @@ def library_versions() -> dict[str, str]:
     import importlib.metadata as md
 
     out = {}
-    for name in ("mujoco", "mink", "mujoco-menagerie", "torch", "numpy", "zarr", "numcodecs", "gymnasium"):
+    for name in (
+        "mujoco",
+        "mink",
+        "mujoco-menagerie",
+        "torch",
+        "numpy",
+        "zarr",
+        "numcodecs",
+        "gymnasium",
+    ):
         try:
             out[name] = md.version(name)
         except md.PackageNotFoundError:
@@ -211,7 +232,9 @@ class Dataset:
             _write_array(synced, name, np.asarray(array))
 
         self.metadata.counts["episodes"] = len(self.episode_ids())
-        self.metadata.counts["successes"] = self.metadata.counts.get("successes", 0) + int(bool(attrs.get("success")))
+        self.metadata.counts["successes"] = self.metadata.counts.get("successes", 0) + int(
+            bool(attrs.get("success"))
+        )
         self.save_metadata()
         return episode_id
 
@@ -236,7 +259,9 @@ class Dataset:
     def read_attrs(self, episode_id: int) -> dict[str, Any]:
         return dict(self.root[self.episode_key(episode_id)].attrs)
 
-    def read_images(self, episode_id: int, camera: str, indices: np.ndarray | None = None) -> np.ndarray:
+    def read_images(
+        self, episode_id: int, camera: str, indices: np.ndarray | None = None
+    ) -> np.ndarray:
         array = self.root[self.episode_key(episode_id)]["raw"][f"cam_{camera}"]["image"]
         return array[...] if indices is None else array[np.asarray(indices)]
 
@@ -257,5 +282,11 @@ def _write_array(group: zarr.Group, name: str, array: np.ndarray) -> None:
         compressors = [zarr.codecs.BloscCodec(cname="zstd", clevel=3, shuffle="shuffle")]
     if array.dtype == object:
         raise TypeError(f"array {name!r} has object dtype; store strings in attrs")
-    out = group.create_array(name=name, shape=array.shape, chunks=chunks or (1,), dtype=array.dtype, compressors=compressors)
+    out = group.create_array(
+        name=name,
+        shape=array.shape,
+        chunks=chunks or (1,),
+        dtype=array.dtype,
+        compressors=compressors,
+    )
     out[...] = array

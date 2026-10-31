@@ -32,7 +32,9 @@ def latest_index_at_or_before(sample_substeps: np.ndarray, tick_substeps: np.nda
     return np.searchsorted(sample_substeps, tick_substeps, side="right") - 1
 
 
-def interpolate_linear(sample_substeps: np.ndarray, values: np.ndarray, tick_substeps: np.ndarray) -> np.ndarray:
+def interpolate_linear(
+    sample_substeps: np.ndarray, values: np.ndarray, tick_substeps: np.ndarray
+) -> np.ndarray:
     """Per-column linear interpolation; outside the sampled range the edge value is held."""
     values = np.asarray(values, dtype=np.float64)
     out = np.empty((len(tick_substeps), values.shape[1]), dtype=np.float64)
@@ -41,7 +43,9 @@ def interpolate_linear(sample_substeps: np.ndarray, values: np.ndarray, tick_sub
     return out
 
 
-def interpolate_quaternion(sample_substeps: np.ndarray, quats: np.ndarray, tick_substeps: np.ndarray) -> np.ndarray:
+def interpolate_quaternion(
+    sample_substeps: np.ndarray, quats: np.ndarray, tick_substeps: np.ndarray
+) -> np.ndarray:
     """Normalised lerp between neighbouring samples, after making consecutive signs agree."""
     quats = np.asarray(quats, dtype=np.float64).copy()
     for i in range(1, len(quats)):
@@ -57,7 +61,10 @@ def nearest_sample_distance(sample_substeps: np.ndarray, tick_substeps: np.ndarr
     idx = np.searchsorted(sample_substeps, tick_substeps)
     left = np.clip(idx - 1, 0, len(sample_substeps) - 1)
     right = np.clip(idx, 0, len(sample_substeps) - 1)
-    return np.minimum(np.abs(tick_substeps - sample_substeps[left]), np.abs(sample_substeps[right] - tick_substeps))
+    return np.minimum(
+        np.abs(tick_substeps - sample_substeps[left]),
+        np.abs(sample_substeps[right] - tick_substeps),
+    )
 
 
 def _summary(errors_substeps: np.ndarray, physics_dt: float) -> dict[str, float]:
@@ -108,7 +115,9 @@ def sync_episode(
     idx = latest_index_at_or_before(v_sub, ticks)
     if np.any(idx < 0):
         raise ValueError("no privileged sample at or before the first tick")
-    cube = np.concatenate([np.asarray(priv["cube_pos"])[idx], np.asarray(priv["cube_quat"])[idx]], axis=1)
+    cube = np.concatenate(
+        [np.asarray(priv["cube_pos"])[idx], np.asarray(priv["cube_quat"])[idx]], axis=1
+    )
     arrays["state"] = np.concatenate([arrays["proprio"], cube], axis=1)
     arrays["priv_index"] = idx
     alignment["priv"] = _summary(ticks - v_sub[idx], physics_dt)

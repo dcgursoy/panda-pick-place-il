@@ -37,7 +37,11 @@ class ReplayReport:
     final_cube_distance_m: float
 
     def __str__(self) -> str:
-        verdict = "EXACT" if self.exact else f"diverges at step {self.first_divergence_step} (max |diff| {self.max_state_abs_diff:.3e})"
+        verdict = (
+            "EXACT"
+            if self.exact
+            else f"diverges at step {self.first_divergence_step} (max |diff| {self.max_state_abs_diff:.3e})"
+        )
         return (
             f"episode {self.episode_id}: {self.steps} steps, {verdict}; success logged={self.success_logged} "
             f"replayed={self.success_replayed}; final cube distance {self.final_cube_distance_m * 1000:.2f} mm"
@@ -82,7 +86,9 @@ def replay_episode(record: EpisodeRecord, env: PandaPickPlaceEnv) -> ReplayRepor
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--dataset", required=True)
     parser.add_argument("--episodes", type=int, nargs="*", default=None, help="default: all")
     parser.add_argument("--data-root", default=None)

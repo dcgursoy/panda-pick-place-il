@@ -47,7 +47,15 @@ PROPRIO_NAMES = (
     + [f"dq{i}" for i in range(1, 8)]
     + ["gripper_width", "tcp_x", "tcp_y", "tcp_z", "tcp_qw", "tcp_qx", "tcp_qy", "tcp_qz"]
 )
-STATE_NAMES = PROPRIO_NAMES + ["cube_x", "cube_y", "cube_z", "cube_qw", "cube_qx", "cube_qy", "cube_qz"]
+STATE_NAMES = PROPRIO_NAMES + [
+    "cube_x",
+    "cube_y",
+    "cube_z",
+    "cube_qw",
+    "cube_qx",
+    "cube_qy",
+    "cube_qz",
+]
 ACTION_NAMES = ["dx", "dy", "dz", "droll", "dpitch", "dyaw", "gripper"]
 
 
@@ -67,7 +75,14 @@ class StreamBuffer:
         return {name: np.asarray(values) for name, values in self.fields.items()}
 
 
-def build_metadata(env: PandaPickPlaceEnv, name: str, source: str, operator: str, input_device: str, notes: str = "") -> DatasetMetadata:
+def build_metadata(
+    env: PandaPickPlaceEnv,
+    name: str,
+    source: str,
+    operator: str,
+    input_device: str,
+    notes: str = "",
+) -> DatasetMetadata:
     cfg = env.cfg
     cameras = {}
     for cam in cfg.camera.names:
@@ -79,20 +94,42 @@ def build_metadata(env: PandaPickPlaceEnv, name: str, source: str, operator: str
         }
     commit, dirty = git_state()
     streams = {
-        "proprio": {"nominal_period_substeps": PROPRIO_PERIOD_SUBSTEPS, "fields": ["qpos", "qvel", "gripper_width", "tcp_pos", "tcp_quat"]},
-        "obs": {"nominal_period_substeps": cfg.substeps, "fields": ["proprio", "state"] + [f"frame_substep_{c}" for c in cfg.camera.names]},
+        "proprio": {
+            "nominal_period_substeps": PROPRIO_PERIOD_SUBSTEPS,
+            "fields": ["qpos", "qvel", "gripper_width", "tcp_pos", "tcp_quat"],
+        },
+        "obs": {
+            "nominal_period_substeps": cfg.substeps,
+            "fields": ["proprio", "state"] + [f"frame_substep_{c}" for c in cfg.camera.names],
+        },
         "priv": {
             "nominal_period_substeps": cfg.substeps,
             "fields": [
-                "sim_state", "ctrl", "q_target", "tcp_target", "tcp_measured", "cube_pos", "cube_quat", "cube_linvel",
-                "gripper_closed", "action_executed", "success_now", "success_streak", "contacts", "reward_terms",
-                "tracking_lag", "resync_count",
+                "sim_state",
+                "ctrl",
+                "q_target",
+                "tcp_target",
+                "tcp_measured",
+                "cube_pos",
+                "cube_quat",
+                "cube_linvel",
+                "gripper_closed",
+                "action_executed",
+                "success_now",
+                "success_streak",
+                "contacts",
+                "reward_terms",
+                "tracking_lag",
+                "resync_count",
             ],
         },
         "action": {"nominal_period_substeps": 0, "fields": ["action"]},
     }
     for cam in cfg.camera.names:
-        streams[f"cam_{cam}"] = {"nominal_period_substeps": cfg.camera.period_substeps, "fields": ["capture_substep", "arrival_substep", "image"]}
+        streams[f"cam_{cam}"] = {
+            "nominal_period_substeps": cfg.camera.period_substeps,
+            "fields": ["capture_substep", "arrival_substep", "image"],
+        }
     return DatasetMetadata(
         name=name,
         source=source,
@@ -112,7 +149,12 @@ def build_metadata(env: PandaPickPlaceEnv, name: str, source: str, operator: str
             "max_delta_rot_rad": cfg.max_delta_rot,
             "gripper": "negative = open, positive = close",
         },
-        observation={"proprio_dim": PROPRIO_DIM, "proprio_names": PROPRIO_NAMES, "state_dim": STATE_DIM, "state_names": STATE_NAMES},
+        observation={
+            "proprio_dim": PROPRIO_DIM,
+            "proprio_names": PROPRIO_NAMES,
+            "state_dim": STATE_DIM,
+            "state_names": STATE_NAMES,
+        },
         streams=streams,
         mujoco_state_spec="mjSTATE_INTEGRATION",
         mujoco_state_size=env.state_size,
@@ -190,9 +232,17 @@ class EpisodeRecorder:
     def _log_tick(self, obs: dict[str, np.ndarray], info: dict[str, Any]) -> None:
         env = self.env
         substep = env.substep
-        frame_substeps = {f"frame_substep_{c}": env.cameras.latest[c].capture_substep for c in env.cfg.camera.names}
+        frame_substeps = {
+            f"frame_substep_{c}": env.cameras.latest[c].capture_substep
+            for c in env.cfg.camera.names
+        }
         self.streams["obs"].append(
-            t_sim=self._t_sim(), t_wall=self._t_wall(), substep=substep, proprio=obs["proprio"].copy(), state=obs["state"].copy(), **frame_substeps
+            t_sim=self._t_sim(),
+            t_wall=self._t_wall(),
+            substep=substep,
+            proprio=obs["proprio"].copy(),
+            state=obs["state"].copy(),
+            **frame_substeps,
         )
         contacts = info["contacts"]
         terms = info["reward_terms"]
@@ -212,14 +262,21 @@ class EpisodeRecorder:
             action_executed=np.asarray(info["action_executed"], dtype=np.float64),
             success_now=bool(info["cube_in_bin_now"]),
             success_streak=int(info["success_streak"]),
-            contacts=np.array([contacts[k] for k in ("floor", "wall", "table", "left_finger", "right_finger")], dtype=bool),
-            reward_terms=np.array([terms[k] for k in ("reach", "grasp", "lift", "place", "success")], dtype=np.float64),
+            contacts=np.array(
+                [contacts[k] for k in ("floor", "wall", "table", "left_finger", "right_finger")],
+                dtype=bool,
+            ),
+            reward_terms=np.array(
+                [terms[k] for k in ("reach", "grasp", "lift", "place", "success")], dtype=np.float64
+            ),
             tracking_lag=np.asarray(info["tracking_lag"], dtype=np.float64),
             resync_count=int(info["resync_count"]),
         )
 
     # ------------------------------------------------------------------- API
-    def start(self, seed: int, ic: InitialCondition | dict | None = None, notes: str = "") -> tuple[dict, dict]:
+    def start(
+        self, seed: int, ic: InitialCondition | dict | None = None, notes: str = ""
+    ) -> tuple[dict, dict]:
         if self.recording:
             raise RuntimeError("already recording; call finish() first")
         env = self.env
@@ -240,7 +297,11 @@ class EpisodeRecorder:
         obs, info = env.reset(seed=seed, options={"ic": ic} if ic is not None else None)
         self._log_proprio(0)
         self._log_tick(obs, info)
-        self.init = {"sim_state": info["sim_state"].copy(), "proprio": obs["proprio"].copy(), "state": obs["state"].copy()}
+        self.init = {
+            "sim_state": info["sim_state"].copy(),
+            "proprio": obs["proprio"].copy(),
+            "state": obs["state"].copy(),
+        }
         commit, dirty = git_state()
         self.attrs = {
             "source": self.source,
@@ -280,7 +341,9 @@ class EpisodeRecorder:
         self._log_tick(obs, info)
         return obs, reward, terminated, truncated, info
 
-    def finish(self, discard: str | None = None, extra_attrs: dict | None = None) -> EpisodeRecord | None:
+    def finish(
+        self, discard: str | None = None, extra_attrs: dict | None = None
+    ) -> EpisodeRecord | None:
         """End the episode. Returns the record (and writes it if a dataset is attached), or None if discarded."""
         if not self.recording:
             raise RuntimeError("not recording")
@@ -290,14 +353,18 @@ class EpisodeRecorder:
         self.recording = False
         if discard is not None:
             if self.dataset is not None:
-                self.dataset.metadata.counts["discarded"] = self.dataset.metadata.counts.get("discarded", 0) + 1
+                self.dataset.metadata.counts["discarded"] = (
+                    self.dataset.metadata.counts.get("discarded", 0) + 1
+                )
                 self.dataset.save_metadata()
             return None
 
         raw = {name: buf.arrays() for name, buf in self.streams.items()}
         raw_attrs = {name: dict(buf.attrs) for name, buf in self.streams.items()}
         n_steps = env.step_count
-        result = sync_episode(raw, n_steps, env.cfg.substeps, env.cfg.physics_timestep, tuple(env.cfg.camera.names))
+        result = sync_episode(
+            raw, n_steps, env.cfg.substeps, env.cfg.physics_timestep, tuple(env.cfg.camera.names)
+        )
         priv = raw["priv"]
         attrs = dict(self.attrs)
         attrs.update(
@@ -315,15 +382,27 @@ class EpisodeRecorder:
         )
         if extra_attrs:
             attrs.update(extra_attrs)
-        record = EpisodeRecord(attrs=attrs, init=self.init, raw=raw, raw_attrs=raw_attrs, synced=result.arrays)
+        record = EpisodeRecord(
+            attrs=attrs, init=self.init, raw=raw, raw_attrs=raw_attrs, synced=result.arrays
+        )
         if self.dataset is not None:
             self.dataset.write_episode(record)
         return record
 
 
-def new_dataset(paths, name: str, env: PandaPickPlaceEnv, source: str, operator: str, input_device: str, notes: str = "") -> Dataset:
+def new_dataset(
+    paths,
+    name: str,
+    env: PandaPickPlaceEnv,
+    source: str,
+    operator: str,
+    input_device: str,
+    notes: str = "",
+) -> Dataset:
     """Create an empty dataset directory for this environment configuration."""
-    return Dataset.create(paths.datasets / name, build_metadata(env, name, source, operator, input_device, notes))
+    return Dataset.create(
+        paths.datasets / name, build_metadata(env, name, source, operator, input_device, notes)
+    )
 
 
 def env_config_from_metadata(metadata: DatasetMetadata) -> EnvConfig:

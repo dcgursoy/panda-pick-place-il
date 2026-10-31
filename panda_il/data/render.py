@@ -24,7 +24,12 @@ def upscale(image: np.ndarray, factor: int) -> np.ndarray:
     return np.repeat(np.repeat(image, factor, axis=0), factor, axis=1)
 
 
-def episode_frames(record: EpisodeRecord, env: PandaPickPlaceEnv | None, camera_names: tuple[str, ...], scale: int = 4) -> list[np.ndarray]:
+def episode_frames(
+    record: EpisodeRecord,
+    env: PandaPickPlaceEnv | None,
+    camera_names: tuple[str, ...],
+    scale: int = 4,
+) -> list[np.ndarray]:
     """One composite frame per control tick: [third-person | camera frames...]."""
     n = len(record.synced["substep"])
     sim_states = np.asarray(record.raw["priv"]["sim_state"])
@@ -51,7 +56,15 @@ def episode_frames(record: EpisodeRecord, env: PandaPickPlaceEnv | None, camera_
 
 def write_video(frames: list[np.ndarray], path: Path, fps: int = 20) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    imageio.mimwrite(str(path), frames, fps=fps, codec="libx264", quality=8, pixelformat="yuv420p", macro_block_size=16)
+    imageio.mimwrite(
+        str(path),
+        frames,
+        fps=fps,
+        codec="libx264",
+        quality=8,
+        pixelformat="yuv420p",
+        macro_block_size=16,
+    )
 
 
 def write_gif(frames: list[np.ndarray], path: Path, fps: int = 10, downscale: int = 2) -> None:
@@ -62,12 +75,18 @@ def write_gif(frames: list[np.ndarray], path: Path, fps: int = 10, downscale: in
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--dataset", required=True)
     parser.add_argument("--episode", type=int, required=True)
-    parser.add_argument("--out", default=None, help="default: DATA_ROOT/videos/<dataset>_ep<id>.mp4")
+    parser.add_argument(
+        "--out", default=None, help="default: DATA_ROOT/videos/<dataset>_ep<id>.mp4"
+    )
     parser.add_argument("--gif", action="store_true")
-    parser.add_argument("--no-viewer", action="store_true", help="skip the re-rendered third-person view")
+    parser.add_argument(
+        "--no-viewer", action="store_true", help="skip the re-rendered third-person view"
+    )
     parser.add_argument("--data-root", default=None)
     args = parser.parse_args()
     paths = Paths.resolve(args.data_root)
