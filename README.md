@@ -12,7 +12,9 @@ logger, Zarr format, timestamp sync, validator, replay, LeRobot export) is our
 own, and LeRobot's Diffusion Policy trained on the exported data serves as a
 cross-check.
 
-> Status: **milestone 0 of 8 (bootstrap).** [DESIGN.md](DESIGN.md) holds the
+![A scripted pick-and-place in the environment: third-person view, front camera, wrist camera](docs/gifs/m1_env_demo.gif)
+
+> Status: **milestone 1 of 8 (environment).** [DESIGN.md](DESIGN.md) holds the
 > design decisions, the alternatives considered and the milestone plan;
 > [RESULTS.md](RESULTS.md) will hold the raw data behind every number reported
 > here, with the command that produced it; [docs/milestone-logs/](docs/milestone-logs/)
@@ -38,6 +40,7 @@ are impractical for the image-based policies.
 uv sync                                  # main environment (Python 3.12, torch 2.15 XPU); CI uses --no-default-groups --group dev --group cpu
 uv run python scripts/check_xpu.py       # CPU-vs-XPU equality checks; writes DATA_ROOT/xpu_check.json
 uv run python scripts/fetch_assets.py    # vendors the Menagerie Panda into assets/ (already committed)
+uv run python scripts/env_demo.py --gif  # scripted pick-and-place video of the environment
 uv run pytest                            # unit tests
 ```
 

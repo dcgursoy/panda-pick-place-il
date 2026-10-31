@@ -159,7 +159,58 @@ image policies would take 22 h per run and is not an option.
 - The scripted expert below 90 %: tune grasp pose and timing before recording.
 - Any tier that proves infeasible is reported with measured timings and the exact reduction.
 
-## 9. Milestone 0: bootstrap
+## 9. The environment (milestone 1)
+
+**Scene.** The table top is the z = 0 plane; the Panda base stands on it at the
+origin. The cube (4 cm, 50 g) starts in a 16 x 16 cm square centred at (0.50,
+-0.15) with a uniform yaw; the bin (inner 12 x 12 x 5 cm) is fixed at (0.50,
+0.25). The Panda is attached through MjSpec with the prefix `panda/`, so the
+cube's free joint comes first in `qpos` and everything is addressed by name.
+Shadows are off (10 ms versus 44 ms per render on this iGPU). The `front`
+camera at (0.98, -0.04, 0.84) looks at the workspace centre with a 48 deg
+field of view, chosen so that every held-out cube pose and the whole bin rim
+stay at least 10 px inside the 96 x 96 image; the `wrist` camera sits on the
++x face of the hand, tilted 20 deg toward the fingertips.
+
+**Gravity compensation.** Menagerie's Panda uses position actuators (kp 4500 /
+3500 / 2000) without gravity compensation, which sags the TCP 2-7 mm. Every
+Panda body has `gravcomp = 1`, set on the spec before compiling (the compiler
+counts compensated bodies). The real Franka controller compensates gravity
+too, and mjctrl's reference IK example does the same.
+
+**Control stack.** The 7-D action (3 translation, 3 rotation, gripper) is
+scaled to at most 1 cm and 0.05 rad per 20 Hz step and integrated into a
+commanded TCP pose: translation in the world frame, rotation about the TCP's
+own axes, position clamped to a workspace box. mink solves one QP per step
+(frame task on the `tcp` site, posture task with cost 1e-3 anchored at the
+home pose, joint-limit and Franka velocity-limit constraints, daqp) on an
+arm-only kinematic model, moving an open-loop reference configuration; its
+seven arm joints become the actuator targets for the 25 physics substeps. The
+reference is resynced to the measured joints (and the commanded pose
+re-anchored) when the measured TCP falls more than 4 cm or 0.3 rad behind it,
+which only happens when the arm is blocked; the actuator lag at full speed is
+about 1.6 cm, and the settled error is 1.2-1.3 mm. A damped-least-squares
+backend with the same interface passes the same tests.
+
+**Success.** Cube centre inside the inner box, cube z within [bin floor, floor
++ half edge + 1 cm], in contact with the bin floor and with neither finger,
+speed below 1 cm/s, for 10 consecutive control steps; `terminated` on success,
+`truncated` at the step limit.
+
+**Cameras.** Each camera captures 10 substeps before every control tick and the
+frame arrives 8 substeps later, so a policy always sees a 20 ms-old image; the
+reset observation is a zero-latency render. The config rejects any
+offset/latency pair whose arrival would coincide with a tick.
+
+**Observations and info.** `proprio` (22-D) and `state` (29-D) as in decision 3;
+`info` carries the full `mjSTATE_INTEGRATION` vector, contacts, reward terms,
+the commanded pose, the joint targets, the tracking lag and the success flag.
+`snapshot()`/`restore()` capture the simulator and the controller together so
+an episode can be continued bit-for-bit (replay in milestone 2 builds on this).
+
+Measurements: `docs/milestone-logs/m1.md`.
+
+## 10. Milestone 0: bootstrap
 
 What was built: the repository and package skeleton, the two uv environments
 and their lock files, DATA_ROOT resolution (`paths.py`), the XPU trust logic
