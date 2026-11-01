@@ -60,6 +60,7 @@ panda_il/
             splits.py, export_lerobot.py, dataset.py                                      (M2, M4)
   policies/ encoders.py, normalize.py, obs_encoder.py, bc.py, checkpoint.py, diffusion/{unet1d,schedulers,ema,policy}.py (M0, M5)
   train/    loop.py, train_bc.py, train_diffusion.py, train_sac.py                        (M5, M6)
+  policies/sac_adapter.py  SAC presented as a single-step state policy to the evaluator  (M6)
   eval/     evaluate.py, aggregate.py, plots.py, gifs.py, failures.py                     (M5, M7)
 scripts/    fetch_assets.py, check_xpu.py, bench_device.py, make_eval_sets.py, collect_expert.py, run_matrix.py
 tools/lerobot_env/   isolated LeRobot environment: crosscheck_dataset.py, train_dp.py, rollout_dp.py
@@ -456,3 +457,52 @@ used for curves during training (`--train.dev-eval-every`) and for this
 milestone's smoke numbers.
 
 Measurements: `docs/milestone-logs/m5.md`.
+
+## 15. The SAC baseline (milestone 6)
+
+**Same environment, different signal.** SAC (`train/train_sac.py`,
+Stable-Baselines3 2.9.2) acts through the same 7-D delta-pose interface, IK,
+20 Hz control rate, 224-step limit, success predicate and cube randomisation
+as the imitation-learning policies, and sees the same 29-D state as the
+state-based ones (proprio plus cube pose), so it is compared with those only.
+The trainer checks at start-up that its `EnvConfig` equals the one
+`scripted_v1` was recorded with, apart from the reward and the recording cap,
+and prints the differences if any. The episode terminates on success and
+truncates at the limit; SB3 bootstraps the value through truncations
+(`TimeLimit.truncated`), so the limit is not mistaken for failure.
+
+**Shaped reward** (`env/task.py`, weights in `RewardConfig`, exposed per
+step in `info["reward_terms"]` for every method): reach, minus the
+TCP-to-cube distance in metres; grasp, +1 per step while both fingers touch
+the cube with the gripper commanded closed; lift, +1 per step while the cube
+is above 5 cm; place, minus the cube-to-bin distance in the plane; success,
++10 once, at termination. A reach-only variant (`--reward reach`: every
+weight but reach set to zero) is the wiring test: a policy that learns it
+must drive the final TCP-to-cube distance towards zero within a few tens of
+thousands of steps, which is checked before any budget is spent on the full
+reward.
+
+**Algorithm.** `MlpPolicy` with two hidden layers of 256, learning rate
+3e-4, gamma 0.98 (a horizon of about 50 control steps, 2.5 s), tau 0.005,
+automatic entropy tuning, a 1 M replay buffer, batch 256, four environments
+in a `DummyVecEnv` with four gradient steps per vector step (one update per
+transition), 10k warm-up transitions, deterministic actions at evaluation.
+Seeds cover SB3, torch and each environment's initial-condition stream.
+
+**Logging and evaluation.** SB3's `progress.csv` and TensorBoard events hold
+env steps, wall clock, losses and entropy; a callback adds the success rate
+and final reach distance of the last 100 training episodes; every 50k env
+steps the policy is rolled out on the 20 dev poses through the same batched
+evaluator the IL policies use (`policies/sac_adapter.py` presents SAC as a
+single-step state policy), so dev curves are comparable across methods.
+Checkpoints every 100k steps plus `final.zip`; `summary.json` records env
+steps, wall clock and steps per second. `eval/evaluate.py` accepts the `.zip`
+directly, so held-out evaluations, failure labels, GIFs and the ledger work
+unchanged and SAC enters the results table and the robustness test on the
+same footing as the state-based IL policies.
+
+**Budget.** Fixed from the 20k-step throughput run and the reach-only test
+in `docs/milestone-logs/m6.md`, as the plan required; three seeds. The
+results table reports SAC's cost as env steps and wall clock next to the IL
+rows' demonstration counts, two different currencies that the write-up does
+not pretend to equate.

@@ -276,8 +276,10 @@ def evaluate(cfg: EvalConfig) -> dict[str, Any]:
             policy.cfg.num_inference_steps if sampler == "ddim" else policy.cfg.num_train_timesteps
         )
     window = window_from_checkpoint(info)
-    dataset_dir = paths.datasets / train_cfg["dataset"]
-    dataset = Dataset(dataset_dir) if (dataset_dir / "metadata.json").exists() else None
+    dataset = None
+    if train_cfg.get("dataset"):  # SAC has no dataset: it is evaluated in the default env
+        dataset_dir = paths.datasets / train_cfg["dataset"]
+        dataset = Dataset(dataset_dir) if (dataset_dir / "metadata.json").exists() else None
     env_cfg = env_config_for(dataset, window.obs_mode, cfg.max_steps)
     ic_set = load_set(cfg.ic_set)
     ics = ic_set.ics[: cfg.episodes] if cfg.episodes else list(ic_set.ics)

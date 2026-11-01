@@ -34,7 +34,12 @@ def build_policy(method: str, cfg):
 
 
 def load_checkpoint(path: str | Path, device: torch.device, use_ema: bool = True):
-    """Returns (policy in eval mode on ``device``, checkpoint payload without the weights)."""
+    """Returns (policy in eval mode on ``device``, checkpoint payload without the weights).
+    A ``.zip`` is a Stable-Baselines3 SAC model (``policies/sac_adapter.py``)."""
+    if str(path).endswith(".zip"):
+        from panda_il.policies.sac_adapter import load_sac
+
+        return load_sac(path, device)
     payload = torch.load(Path(path), map_location="cpu", weights_only=False)
     method = payload["method"]
     cfg = policy_config_from_dict(method, payload["policy_config"])
