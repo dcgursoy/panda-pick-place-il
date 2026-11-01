@@ -12,7 +12,9 @@ dataset tooling, on a laptop without CUDA. The deliverables are the code, the
 recorded demonstrations, a results table with confidence intervals, a
 success-versus-demos curve, a human-versus-scripted demo ablation, a
 robustness test, rollout GIFs and a failure analysis, each number traceable to
-the command and run that produced it.
+the command and run that produced it. (Scope change on 2026-11-01, decision
+17: the human dataset was not recorded, so the ablation is replaced by a
+teleop showcase and every experiment uses the scripted demonstrations.)
 
 Non-goals: real-robot transfer, more than one task or robot, state-of-the-art
 policies, and cloud compute (everything runs on the laptop described below).
@@ -98,7 +100,7 @@ selected with `--extra cpu`.
 3. **Observations**: `proprio` (22-D: qpos 7, qvel 7, gripper width, tcp position 3, tcp quaternion 4) and `state` (29-D: proprio + cube pose). Image policies and the LeRobot image cross-check see proprio only; state policies and SAC see `state`.
 4. **Action**: 7-D delta TCP pose (max 1 cm, 0.05 rad per step) plus a gripper command in [-1, 1]; the commanded absolute pose and the joint targets are logged too.
 5. **IK**: a commanded TCP pose integrated from the deltas (world-frame translation, local-frame rotation, workspace box), mink FrameTask + posture task + joint and velocity limits, one solve per control step, open-loop reference resynced when it drifts more than 0.1 rad from the measured joints; joint targets go to the Menagerie position actuators for 25 substeps.
-6. **Success and termination**: cube centre inside the bin's inner box, z within the floor band, in contact with the bin floor and with neither finger, speed under 1 cm/s, for 10 consecutive control steps; otherwise the episode runs to the time limit (300 steps provisional, re-fixed after demo collection as 1.5x the 95th percentile of successful human demo length). SAC gets `terminated` on success and `truncated` at the limit.
+6. **Success and termination**: cube centre inside the bin's inner box, z within the floor band, in contact with the bin floor and with neither finger, speed under 1 cm/s, for 10 consecutive control steps; otherwise the episode runs to the time limit. The limit is 1.5x the 95th percentile of successful demonstration length, rounded up to a multiple of 8: with `scripted_v1` (p95 = 145 steps) that is **224 steps (11.2 s)**, `EnvConfig.max_steps`, used by every evaluation and by SAC (recordings run with a looser cap: 300 for the expert, `--max-steps` in teleop). The milestone 5 dev-set numbers were taken before this was fixed, at 300. SAC gets `terminated` on success and `truncated` at the limit.
 7. **Held-out sets** are committed JSON files drawn from named RNG streams; demos are checked for proximity to them.
 8. **Only successful episodes are used for training**; the validation split is 20 fixed episodes; demo-count subsets are nested prefixes of a per-seed shuffle of the training split.
 9. **Checkpoint rule**: the final checkpoint at a fixed per-modality budget (EMA weights where used), for every method, no selection; the dev set is for curves only; a ledger in RESULTS.md records every evaluation on a held-out set.
@@ -109,6 +111,7 @@ selected with `--extra cpu`.
 14. **Data in RAM** for training (`num_workers=0`): Windows spawn workers are slow and cannot return XPU tensors; the full dataset is under 4 GB.
 15. **CI** runs lint and the CPU tests on Linux; rendering, viewer and XPU tests run locally and are logged.
 16. **Git**: linear history, commit and push per milestone, never rewrite pushed history.
+17. **Scope change (2026-11-01): no human dataset.** After the gamepad check and one practice episode, the author chose not to record the planned 220 human demonstrations (about 2.5 hours of teleoperation). Consequences: the human-versus-scripted ablation is dropped and reported as not run; the demo-count curve, the method comparison, the robustness test, SAC and the LeRobot cross-check all use `scripted_v1`; the one human episode (`human_v1`, 5927 steps, validated and replayed exactly) is shown in the README as a teleop showcase and used nowhere else; the time limit rule of decision 6 is applied to the scripted lengths. What the scripted-only study cannot show is Diffusion Policy's advantage on variable, multimodal human data (a deterministic expert is easy for plain behavior cloning, as milestone 5 already shows); the write-up says so.
 
 ## 6. Milestone plan and exit criteria
 
@@ -117,8 +120,8 @@ selected with `--extra cpu`.
 | M0 | Bootstrap: repo, environments, package skeleton, CI, XPU self-check, device benchmark | tests green; CI green; benchmark table; self-check verdict recorded |
 | M1 | Environment: scene, env, IK, cameras, seeding, held-out sets | determinism test; IK tracking < 2 mm; `check_env`; MP4 of both cameras; timing table |
 | M2 | Dataset core: logger, schema, sync, validator | synthetic timing-offset tests; one recorded episode validated |
-| M3 | Expert, teleop, replay/render; gamepad mapping | expert >= 90 % on 50 ICs; teleop video; replay reproduces an episode; demos recorded by the author |
-| M4 | Stats, splits, LeRobot export and cross-check | LeRobot loads both exports; batch comparison; validator report on the demos |
+| M3 | Expert, teleop, replay/render; gamepad mapping | expert >= 90 % on 50 ICs; teleop video; replay reproduces an episode; gamepad mapping verified with the author (one human episode recorded; the human dataset was then dropped, decision 17) |
+| M4 | Stats, splits, LeRobot export and cross-check | LeRobot loads both exports; batch comparison; validator report on the scripted demos |
 | M5 | Policies, training, evaluation | loss curves; dev-set success per method on scripted demos; timing per method |
 | M6 | SAC baseline | reach-only smoke test; learning curves; env steps and wall-clock |
 | M7 | Experiments, LeRobot DP, analysis | results table with CIs, plots, GIFs, failure analysis |
@@ -162,12 +165,12 @@ with four 20-episode dev evaluations included, `docs/milestone-logs/m5.md`):
 | BC-ResNet chunk, 298 ms/step | 106 min | 11 | ~19.5 h |
 | BC-ResNet single-step | ~106 min | 3 | ~5.5 h |
 | DP-image, 330 ms/step | 119 min | 11 | ~22 h |
-| Human vs scripted at 100 demos (5 methods) | as above | 15 state + 6 image | ~14 h |
+| Human vs scripted at 100 demos (5 methods) | dropped (decision 17) | 0 | 0 |
 | SAC, 1-2 M env steps (CPU; confirmed in M6) | 2-4 h | 3 + smoke | ~10 h |
 | LeRobot DP state + image | ~0.5 h + ~2 h | 2 | ~3 h |
-| Held-out evaluations (100 episodes: state ~1.5 min, image ~6.5 min with ten lockstep envs) | | ~180 | ~10 h |
+| Held-out evaluations (100 episodes: state ~1.5 min, image ~6.5 min with ten lockstep envs) | | ~150 | ~8 h |
 
-About 100 laptop-hours. The image runs are 1.5 to 1.7 times slower than the
+About 85 laptop-hours without the human rows. The image runs are 1.5 to 1.7 times slower than the
 milestone 0 benchmark predicted (the benchmark timed the networks alone; a
 training step also crops, normalises and moves 256 images, updates the EMA
 and runs the optimiser), the state runs match it. One caveat for the matrix:

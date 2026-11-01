@@ -78,7 +78,10 @@ class EnvConfig:
     obs_mode: str = "state"  # "state", "image" or "both"
     physics_timestep: float = 0.002
     substeps: int = 25  # 500 Hz physics / 20 Hz control
-    max_steps: int = 300  # provisional; re-fixed after demo collection (DESIGN.md decision 6)
+    # the evaluation time limit: 1.5 x the 95th percentile of successful scripted_v1 demo lengths
+    # (145 steps), rounded up to a multiple of 8 (DESIGN.md decision 6); recordings use a looser
+    # cap (teleop --max-steps, collect_expert used 300)
+    max_steps: int = 224
     max_delta_pos: float = 0.01  # m per control step at |action| = 1
     max_delta_rot: float = 0.05  # rad per control step at |action| = 1
     workspace_min: tuple[float, float, float] = (0.25, -0.40, 0.01)

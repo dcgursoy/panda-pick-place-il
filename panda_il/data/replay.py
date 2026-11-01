@@ -51,10 +51,13 @@ class ReplayReport:
 def replay_episode(record: EpisodeRecord, env: PandaPickPlaceEnv) -> ReplayReport:
     attrs = record.attrs
     ic = InitialCondition.from_dict(attrs["ic"])
-    env.reset(seed=int(attrs["seed"]), options={"ic": ic})
     logged_states = np.asarray(record.raw["priv"]["sim_state"])
     actions = np.asarray(record.synced["action"])
     n_steps = int(attrs["length"])
+    # replay checks determinism, not the time limit: an episode recorded past the limit
+    # (human recordings before the cap was enforced) is replayed to its end
+    env.cfg.max_steps = max(env.cfg.max_steps, n_steps)
+    env.reset(seed=int(attrs["seed"]), options={"ic": ic})
 
     first_divergence = None
     max_diff = float(np.max(np.abs(env.get_sim_state() - logged_states[0])))
@@ -62,14 +65,13 @@ def replay_episode(record: EpisodeRecord, env: PandaPickPlaceEnv) -> ReplayRepor
         first_divergence = 0
     info = None
     for k in range(n_steps):
+        # stepping past termination is deliberate: a recording made before the teleop froze
+        # finished episodes holds steps after success, and every logged state is compared
         _, _, terminated, truncated, info = env.step(actions[k])
         diff = float(np.max(np.abs(env.get_sim_state() - logged_states[k + 1])))
         max_diff = max(max_diff, diff)
         if diff > 0 and first_divergence is None:
             first_divergence = k + 1
-        if (terminated or truncated) and k + 1 < n_steps:
-            first_divergence = first_divergence if first_divergence is not None else k + 1
-            break
     success_replayed = bool(info["success"]) if info is not None else False
     cube_logged = np.asarray(record.raw["priv"]["cube_pos"])[-1]
     cube_replayed = np.asarray(info["cube_pos"]) if info is not None else cube_logged

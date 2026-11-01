@@ -156,3 +156,16 @@ def test_evaluator_frames_compose_three_panels():
         evaluator.close()
     assert len(frames[0]) == 3
     assert frames[0][0].shape == (env_cfg.render_height, 3 * env_cfg.render_width + 16, 3)
+
+
+def test_evaluation_limit_is_the_study_limit_not_the_recording_cap(tmp_path):
+    from dataclasses import asdict
+
+    from panda_il.eval.evaluate import env_config_for
+
+    metadata = syn.synthetic_metadata()
+    metadata.env_config = asdict(EnvConfig(obs_mode="both", max_steps=300))  # recording cap
+    Dataset.create(tmp_path / "ds", metadata)
+    ds = Dataset(tmp_path / "ds")
+    assert env_config_for(ds, "state").max_steps == EnvConfig().max_steps == 224
+    assert env_config_for(ds, "state", max_steps=40).max_steps == 40

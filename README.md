@@ -16,7 +16,7 @@ cross-check.
 
 ![A scripted pick-and-place in the environment: third-person view, front camera, wrist camera](docs/gifs/m1_env_demo.gif)
 
-> Status: **milestone 5 of 8 (policies, training and evaluation, verified on scripted data); waiting for human demonstrations.** [DESIGN.md](DESIGN.md) holds the
+> Status: **milestone 5 of 8 (policies, training and evaluation, verified on scripted data).** The study runs on the scripted demonstrations: one human teleop episode was recorded as a pipeline showcase (below) and the author chose not to record the 220-episode human dataset, so the human-versus-scripted ablation is out of scope (DESIGN.md, decision 17). [DESIGN.md](DESIGN.md) holds the
 > design decisions, the alternatives considered and the milestone plan;
 > [RESULTS.md](RESULTS.md) will hold the raw data behind every number reported
 > here, with the command that produced it; [docs/milestone-logs/](docs/milestone-logs/)
@@ -60,6 +60,10 @@ cd tools/lerobot_env && uv sync
 
 ## Recording demonstrations
 
+The teleop tool works end to end with a PlayStation pad; the human dataset of
+the original plan was not recorded (one practice episode exists, see below),
+so this section documents the tool.
+
 ```bash
 uv run python -m panda_il.teleop.teleop --dataset human_v1 --operator "<your name>" --max-steps 1200
 ```
@@ -100,6 +104,15 @@ observation cameras for the iGPU); the recorded timestamps are simulation
 time, so the data is unaffected, the motion just looks a little slow. A
 smaller viewer window helps.
 
+The one human episode (`human_v1`, episode 0, PS4 controller, 5927 steps on
+the author's first attempt) validates, replays bit-exactly and looks like
+this from the grasp to the place, at 4x speed:
+
+![human teleop episode 0: third-person view, front camera, wrist camera, 4x](docs/gifs/human_teleop_ep0.gif)
+
+It is a pipeline showcase, not training data: every result in this study
+comes from the scripted expert's demonstrations (`scripted_v1`).
+
 ## Training and evaluation
 
 Every stage is one command; `--help` lists every option (dataclass configs
@@ -108,13 +121,13 @@ through [tyro](https://github.com/brentyi/tyro)). Runs go to
 config, TensorBoard events, checkpoints and a `summary.json`.
 
 ```bash
-uv run python -m panda_il.data.splits --dataset human_v1 --val 20                       # fixed validation split (once per dataset)
-uv run python -m panda_il.train.train_bc --train.dataset human_v1 --train.obs-mode state  # BC-MLP, action chunks
-uv run python -m panda_il.train.train_bc --train.dataset human_v1 --train.obs-mode state --policy.pred-horizon 1 --policy.action-horizon 1 --train.run-name bc_single/human_v1_state_all/seed0
-uv run python -m panda_il.train.train_diffusion --train.dataset human_v1 --train.obs-mode state                                # Diffusion Policy, state
-uv run python -m panda_il.train.train_bc --train.dataset human_v1 --train.obs-mode image --train.batch-size 64               # BC-ResNet
-uv run python -m panda_il.train.train_diffusion --train.dataset human_v1 --train.obs-mode image --train.batch-size 64        # Diffusion Policy, images
-uv run python -m panda_il.train.train_diffusion --train.dataset human_v1 --train.obs-mode state --train.subset 50 --train.seed 1  # demo-count curve point
+uv run python -m panda_il.data.splits --dataset scripted_v1 --val 20                       # fixed validation split (once per dataset)
+uv run python -m panda_il.train.train_bc --train.dataset scripted_v1 --train.obs-mode state  # BC-MLP, action chunks
+uv run python -m panda_il.train.train_bc --train.dataset scripted_v1 --train.obs-mode state --policy.pred-horizon 1 --policy.action-horizon 1 --train.run-name bc_single/scripted_v1_state_all/seed0
+uv run python -m panda_il.train.train_diffusion --train.dataset scripted_v1 --train.obs-mode state                                # Diffusion Policy, state
+uv run python -m panda_il.train.train_bc --train.dataset scripted_v1 --train.obs-mode image --train.batch-size 64               # BC-ResNet
+uv run python -m panda_il.train.train_diffusion --train.dataset scripted_v1 --train.obs-mode image --train.batch-size 64        # Diffusion Policy, images
+uv run python -m panda_il.train.train_diffusion --train.dataset scripted_v1 --train.obs-mode state --train.subset 50 --train.seed 1  # demo-count curve point
 uv run tensorboard --logdir "C:/robodata/panda-pick-place-il/runs"
 uv run python -m panda_il.eval.evaluate --checkpoint "<run dir>/last.pt" --ic-set dev_set_v1 --gifs 2    # 20 dev episodes, 2 GIFs
 uv run python -m panda_il.eval.evaluate --checkpoint "<run dir>/last.pt" --ic-set eval_set_v1           # 100 held-out episodes, logged in docs/eval_ledger.jsonl

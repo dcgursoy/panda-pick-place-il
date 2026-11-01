@@ -29,12 +29,14 @@ def episode_frames(
     env: PandaPickPlaceEnv | None,
     camera_names: tuple[str, ...],
     scale: int = 4,
+    start: int = 0,
+    end: int | None = None,
 ) -> list[np.ndarray]:
-    """One composite frame per control tick: [third-person | camera frames...]."""
+    """One composite frame per control tick in [start, end): [third-person | cameras...]."""
     n = len(record.synced["substep"])
     sim_states = np.asarray(record.raw["priv"]["sim_state"])
     frames = []
-    for k in range(n):
+    for k in range(start, n if end is None else min(end, n)):
         panels = []
         if env is not None:
             env.set_sim_state(sim_states[k])
@@ -67,9 +69,16 @@ def write_video(frames: list[np.ndarray], path: Path, fps: int = 20) -> None:
     )
 
 
-def write_gif(frames: list[np.ndarray], path: Path, fps: int = 10, downscale: int = 2) -> None:
+def write_gif(
+    frames: list[np.ndarray],
+    path: Path,
+    fps: int = 10,
+    downscale: int = 2,
+    stride: int | None = None,
+) -> None:
+    """Every ``stride``-th frame (default: real time at ``fps``) at ``1/downscale`` size."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    stride = max(1, 20 // fps)
+    stride = max(1, 20 // fps) if stride is None else max(1, stride)
     small = [f[::downscale, ::downscale] for f in frames[::stride]]
     iio.imwrite(path, np.stack(small), extension=".gif", duration=int(1000 / fps), loop=0)
 
@@ -84,6 +93,13 @@ def main() -> int:
         "--out", default=None, help="default: DATA_ROOT/videos/<dataset>_ep<id>.mp4"
     )
     parser.add_argument("--gif", action="store_true")
+    parser.add_argument("--gif-fps", type=int, default=10)
+    parser.add_argument("--gif-downscale", type=int, default=2)
+    parser.add_argument(
+        "--gif-stride", type=int, default=None, help="keep every n-th frame (default: real time)"
+    )
+    parser.add_argument("--start", type=int, default=0, help="first control step to render")
+    parser.add_argument("--end", type=int, default=None, help="one past the last step")
     parser.add_argument(
         "--no-viewer", action="store_true", help="skip the re-rendered third-person view"
     )
@@ -99,13 +115,17 @@ def main() -> int:
         cfg.render_width, cfg.render_height = 480, 384
         env = PandaPickPlaceEnv(cfg)
         env.reset(seed=int(record.attrs["seed"]), options={"ic": record.attrs["ic"]})
-    frames = episode_frames(record, env, tuple(dataset.metadata.cameras))
+    frames = episode_frames(
+        record, env, tuple(dataset.metadata.cameras), start=args.start, end=args.end
+    )
     out = Path(args.out) if args.out else paths.videos / f"{dataset.name}_ep{args.episode:06d}.mp4"
     write_video(frames, out)
     print(f"wrote {out} ({len(frames)} frames, success={record.attrs['success']})")
     if args.gif:
         gif = out.with_suffix(".gif")
-        write_gif(frames, gif)
+        write_gif(
+            frames, gif, fps=args.gif_fps, downscale=args.gif_downscale, stride=args.gif_stride
+        )
         print(f"wrote {gif}")
     if env is not None:
         env.close()

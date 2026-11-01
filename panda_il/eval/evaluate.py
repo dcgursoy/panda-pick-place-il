@@ -76,11 +76,12 @@ def episode_seed(seed: int, ic_index: int) -> int:
 def env_config_for(
     dataset: Dataset | None, obs_mode: str, max_steps: int | None = None
 ) -> EnvConfig:
-    """The env a policy is evaluated in: the one its training data was recorded with."""
+    """The env a policy is evaluated in: the one its training data was recorded with, except
+    for the episode limit, which is the study-wide evaluation limit (``EnvConfig.max_steps``,
+    decision 6) rather than the looser cap the recording ran with."""
     cfg = env_config_from_metadata(dataset.metadata) if dataset is not None else EnvConfig()
     cfg.obs_mode = obs_mode
-    if max_steps is not None:
-        cfg.max_steps = max_steps
+    cfg.max_steps = EnvConfig().max_steps if max_steps is None else max_steps
     return cfg
 
 
