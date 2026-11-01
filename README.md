@@ -16,7 +16,7 @@ cross-check.
 
 ![A scripted pick-and-place in the environment: third-person view, front camera, wrist camera](docs/gifs/m1_env_demo.gif)
 
-> Status: **milestone 5 of 8 (policies, training and evaluation, verified on scripted data).** The study runs on the scripted demonstrations: one human teleop episode was recorded as a pipeline showcase (below) and the author chose not to record the 220-episode human dataset, so the human-versus-scripted ablation is out of scope (DESIGN.md, decision 17). [DESIGN.md](DESIGN.md) holds the
+> Status: **milestone 6 of 8 (SAC baseline: 0 % success at 1 M env steps on three seeds, documented in [docs/milestone-logs/m6.md](docs/milestone-logs/m6.md)).** The study runs on the scripted demonstrations: one human teleop episode was recorded as a pipeline showcase (below) and the author chose not to record the 220-episode human dataset, so the human-versus-scripted ablation is out of scope (DESIGN.md, decision 17). [DESIGN.md](DESIGN.md) holds the
 > design decisions, the alternatives considered and the milestone plan;
 > [RESULTS.md](RESULTS.md) will hold the raw data behind every number reported
 > here, with the command that produced it; [docs/milestone-logs/](docs/milestone-logs/)

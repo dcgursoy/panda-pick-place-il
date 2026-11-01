@@ -91,3 +91,32 @@ def test_state_observation_wrapper_keeps_info():
     obs2, reward, terminated, truncated, info = env.step(np.zeros(7, dtype=np.float32))
     assert obs2.shape == (29,) and isinstance(reward, float) and "reward_terms" in info
     env.close()
+
+
+def test_sac_resume_continues_the_step_count(tmp_path):
+    base = SACConfig(
+        seed=1,
+        total_steps=24,
+        n_envs=2,
+        reward="reach",
+        learning_starts=8,
+        buffer_size=200,
+        batch_size=4,
+        gradient_steps=1,
+        net=(8, 8),
+        threads=1,
+        eval_every=1000,
+        eval_episodes=1,
+        eval_envs=1,
+        checkpoint_every=1000,
+        run_name="smoke/sac_base",
+        data_root=str(tmp_path),
+    )
+    first = train(base)
+    assert (first / "replay_buffer.pkl").exists()
+    resumed = train(
+        SACConfig(**{**base.__dict__, "resume": str(first), "run_name": "smoke/sac_resumed"})
+    )
+    summary = json.loads((resumed / "summary.json").read_text())
+    assert summary["total_steps"] >= 48 and summary["steps_this_run"] >= 24
+    assert "replay buffer" in json.loads((resumed / "config.json").read_text())["resumed_from"]

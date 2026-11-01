@@ -63,6 +63,10 @@ class SACConfig:
     run_name: str | None = None  # default: sac/<reward>/seed<k>
     data_root: str | None = None
     check_env: bool = False  # run SB3's env checker first
+    resume: str | None = (
+        None  # a run directory: continue its final.zip (and replay buffer, if saved)
+    )
+    save_replay_buffer: bool = True  # final replay buffer next to final.zip (exact resumes)
 
 
 class StateObservation(gym.ObservationWrapper):
@@ -134,23 +138,38 @@ def train(cfg: SACConfig) -> Path:
 
     vec_env = DummyVecEnv([lambda: make_sac_env(env_cfg) for _ in range(cfg.n_envs)])
     vec_env.seed(cfg.seed)
-    model = SAC(
-        "MlpPolicy",
-        vec_env,
-        learning_rate=cfg.lr,
-        buffer_size=cfg.buffer_size,
-        learning_starts=cfg.learning_starts,
-        batch_size=cfg.batch_size,
-        tau=cfg.tau,
-        gamma=cfg.gamma,
-        train_freq=cfg.train_freq,
-        gradient_steps=cfg.gradient_steps,
-        ent_coef=cfg.ent_coef,
-        policy_kwargs={"net_arch": list(cfg.net)},
-        seed=cfg.seed,
-        device="cpu",
-        verbose=0,
-    )
+    resumed_from = None
+    if cfg.resume:
+        source = Path(cfg.resume)
+        source = source if source.is_absolute() else paths.runs / source
+        model = SAC.load(source / "final.zip", env=vec_env, device="cpu")
+        buffer = source / "replay_buffer.pkl"
+        if buffer.exists():
+            model.load_replay_buffer(buffer)
+            resumed_from = f"{source} (with its replay buffer)"
+        else:
+            # no buffer: collect learning_starts fresh transitions before updating again
+            model.learning_starts = model.num_timesteps + cfg.learning_starts
+            resumed_from = f"{source} (buffer not saved: refilled from scratch)"
+        print(f"resumed from {resumed_from} at {model.num_timesteps} env steps")
+    else:
+        model = SAC(
+            "MlpPolicy",
+            vec_env,
+            learning_rate=cfg.lr,
+            buffer_size=cfg.buffer_size,
+            learning_starts=cfg.learning_starts,
+            batch_size=cfg.batch_size,
+            tau=cfg.tau,
+            gamma=cfg.gamma,
+            train_freq=cfg.train_freq,
+            gradient_steps=cfg.gradient_steps,
+            ent_coef=cfg.ent_coef,
+            policy_kwargs={"net_arch": list(cfg.net)},
+            seed=cfg.seed,
+            device="cpu",
+            verbose=0,
+        )
     logger = configure(str(run_dir), ["stdout", "csv", "tensorboard"])
     model.set_logger(logger)
     commit, dirty = git_state()
@@ -160,6 +179,7 @@ def train(cfg: SACConfig) -> Path:
                 "train": asdict(cfg),
                 "env": asdict(env_cfg),
                 "env_differences_vs_scripted_v1": differences,
+                "resumed_from": resumed_from,
                 "git_commit": commit,
                 "git_dirty": dirty,
                 "sb3_policy": str(model.policy),
@@ -219,20 +239,31 @@ def train(cfg: SACConfig) -> Path:
         name_prefix="sac",
     )
     stats = RolloutStats()
+    start_steps = int(model.num_timesteps)
+    stats.next_eval = (start_steps // cfg.eval_every + 1) * cfg.eval_every
     print(
         f"SAC ({cfg.reward} reward), seed {cfg.seed}: {cfg.total_steps} env steps on {cfg.n_envs} envs"
     )
     print(f"run dir: {run_dir}")
     t0 = time.perf_counter()
-    model.learn(total_timesteps=cfg.total_steps, callback=[checkpoints, stats], log_interval=10)
+    model.learn(
+        total_timesteps=cfg.total_steps,
+        callback=[checkpoints, stats],
+        log_interval=10,
+        reset_num_timesteps=cfg.resume is None,
+    )
     elapsed = time.perf_counter() - t0
     model.save(run_dir / "final.zip")
+    if cfg.save_replay_buffer:
+        model.save_replay_buffer(run_dir / "replay_buffer.pkl")
     if not dev_curve or dev_curve[-1][0] < model.num_timesteps:
         stats._dev_eval()
     evaluator.close()
     vec_env.close()
     summary: dict[str, Any] = {
         "total_steps": int(model.num_timesteps),
+        "steps_this_run": int(model.num_timesteps) - start_steps,
+        "resumed_from": resumed_from,
         "wall_seconds": elapsed,
         "env_steps_per_second": model.num_timesteps / elapsed,
         "episodes": len(stats.successes),
